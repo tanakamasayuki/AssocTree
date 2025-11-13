@@ -72,6 +72,7 @@ void loop() {}
 - `examples/BasicUsage/BasicUsage.ino` – プロファイル情報とJSON出力。
 - `examples/ConfigManager/ConfigManager.ino` – `unset()` / `gc()` を活用する設定ストア。
 - `examples/ExternalBuffer/ExternalBuffer.ino` – `AssocTree<0>` と外部バッファ（PSRAM 等）の組み合わせ。
+- `examples/IteratorDemo/IteratorDemo.ino` – オブジェクト/配列を走査するイテレータAPIの例。
 
 ## 実行時バッファ版
 

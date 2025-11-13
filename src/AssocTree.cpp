@@ -319,6 +319,121 @@ detail::LazyPathRef NodeRef::pendingPath() const {
   return ref;
 }
 
+NodeRange NodeRef::children() const {
+  if (!tree_) {
+    return NodeRange();
+  }
+  uint16_t idx = resolveExisting();
+  if (idx == detail::kInvalidIndex) {
+    return NodeRange();
+  }
+  const detail::Node* node = tree_->nodeAt(idx);
+  if (!node) {
+    return NodeRange();
+  }
+  if (node->type != detail::NodeType::Object &&
+      node->type != detail::NodeType::Array) {
+    return NodeRange();
+  }
+  return NodeRange(tree_, node->firstChild, node->type == detail::NodeType::Array, tree_->revision_);
+}
+
+NodeEntry::NodeEntry(AssocTreeBase* tree, uint16_t nodeIndex, bool isArray, size_t arrayIndex)
+    : tree_(tree), nodeIndex_(nodeIndex), isArray_(isArray), arrayIndex_(arrayIndex) {}
+
+const char* NodeEntry::key() const {
+  if (!tree_ || isArray_ || nodeIndex_ == detail::kInvalidIndex) {
+    return "";
+  }
+  const detail::Node* node = tree_->nodeAt(nodeIndex_);
+  if (!node || !node->key.valid()) {
+    return "";
+  }
+  return tree_->stringAt(node->key);
+}
+
+NodeRef NodeEntry::value() const {
+  if (!tree_ || nodeIndex_ == detail::kInvalidIndex) {
+    return NodeRef();
+  }
+  return NodeRef(tree_, nodeIndex_, nodeIndex_);
+}
+
+NodeIterator::NodeIterator(
+    AssocTreeBase* tree,
+    uint16_t start,
+    bool isArray,
+    uint32_t revision,
+    size_t arrayIndex)
+    : tree_(tree),
+      current_(start),
+      isArray_(isArray),
+      revision_(revision),
+      arrayIndex_(arrayIndex) {
+  advanceToValid();
+}
+
+void NodeIterator::advanceToValid() {
+  if (!tree_ || current_ == detail::kInvalidIndex) {
+    current_ = detail::kInvalidIndex;
+    return;
+  }
+  if (revision_ != tree_->revision_) {
+    current_ = detail::kInvalidIndex;
+    return;
+  }
+  while (current_ != detail::kInvalidIndex) {
+    const detail::Node* node = tree_->nodeAt(current_);
+    if (node && node->used) {
+      return;
+    }
+    current_ = node ? node->nextSibling : detail::kInvalidIndex;
+  }
+}
+
+NodeEntry NodeIterator::operator*() const {
+  return NodeEntry(tree_, current_, isArray_, arrayIndex_);
+}
+
+NodeIterator& NodeIterator::operator++() {
+  if (!tree_ || current_ == detail::kInvalidIndex) {
+    current_ = detail::kInvalidIndex;
+    return *this;
+  }
+  if (revision_ != tree_->revision_) {
+    current_ = detail::kInvalidIndex;
+    return *this;
+  }
+  if (isArray_) {
+    ++arrayIndex_;
+  }
+  const detail::Node* node = tree_->nodeAt(current_);
+  current_ = node ? node->nextSibling : detail::kInvalidIndex;
+  advanceToValid();
+  return *this;
+}
+
+NodeRange::NodeRange(
+    AssocTreeBase* tree,
+    uint16_t firstChild,
+    bool isArray,
+    uint32_t revision)
+    : tree_(tree),
+      firstChild_(firstChild),
+      isArray_(isArray),
+      revision_(revision) {}
+
+NodeIterator NodeRange::begin() const {
+  if (!tree_) {
+    return NodeIterator();
+  }
+  return NodeIterator(tree_, firstChild_, isArray_, revision_, 0);
+}
+
+NodeIterator NodeRange::end() const {
+  return NodeIterator(tree_, detail::kInvalidIndex, isArray_, revision_, 0);
+}
+
 AssocTreeBase::AssocTreeBase(uint8_t* buffer, size_t totalBytes)
     : buffer_(buffer),
       totalBytes_(std::min(

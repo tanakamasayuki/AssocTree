@@ -72,6 +72,7 @@ See `examples/BasicUsage/BasicUsage.ino` for the complete sketch.
 - `examples/BasicUsage/BasicUsage.ino` – common profile data plus JSON dump.
 - `examples/ConfigManager/ConfigManager.ino` – runtime configuration store with `unset()` and `gc()`.
 - `examples/ExternalBuffer/ExternalBuffer.ino` – template `AssocTree<0>` fed by PSRAM or custom buffers.
+- `examples/IteratorDemo/IteratorDemo.ino` – demonstrates the child iterator API for objects/arrays.
 
 ## Runtime Buffer Variant
 

@@ -5,6 +5,7 @@
 #include <string>
 #include <type_traits>
 #include <utility>
+#include <iterator>
 
 #ifndef ASSOCTREE_MAX_LAZY_SEGMENTS
 #define ASSOCTREE_MAX_LAZY_SEGMENTS 16
@@ -22,6 +23,9 @@ namespace assoc_tree {
 
 class AssocTreeBase;
 class NodeRef;
+class NodeIterator;
+class NodeRange;
+class NodeEntry;
 
 namespace detail {
 
@@ -135,9 +139,11 @@ class NodeRef {
   void unset();
 
   bool isAttached() const;
+  NodeRange children() const;
 
  private:
   friend class AssocTreeBase;
+  friend class NodeEntry;
   NodeRef(AssocTreeBase* tree, uint16_t baseIndex, uint16_t attachedIndex);
 
   AssocTreeBase* tree_ = nullptr;
@@ -160,6 +166,76 @@ class NodeRef {
   detail::LazyPathRef pendingPath() const;
 };
 
+class NodeEntry {
+ public:
+  const char* key() const;
+  size_t index() const { return isArray_ ? arrayIndex_ : 0; }
+  bool isArrayEntry() const { return isArray_; }
+  NodeRef value() const;
+
+ private:
+  friend class NodeIterator;
+  NodeEntry(AssocTreeBase* tree, uint16_t nodeIndex, bool isArray, size_t arrayIndex);
+
+  AssocTreeBase* tree_ = nullptr;
+  uint16_t nodeIndex_ = detail::kInvalidIndex;
+  bool isArray_ = false;
+  size_t arrayIndex_ = 0;
+};
+
+class NodeIterator {
+ public:
+  using value_type = NodeEntry;
+  using reference = NodeEntry;
+  using pointer = void;
+  using difference_type = std::ptrdiff_t;
+  using iterator_category = std::forward_iterator_tag;
+
+  NodeIterator() = default;
+
+  NodeEntry operator*() const;
+  NodeIterator& operator++();
+  NodeIterator operator++(int) {
+    NodeIterator tmp = *this;
+    ++(*this);
+    return tmp;
+  }
+
+  bool operator==(const NodeIterator& other) const {
+    return tree_ == other.tree_ && current_ == other.current_;
+  }
+  bool operator!=(const NodeIterator& other) const { return !(*this == other); }
+
+ private:
+  friend class NodeRange;
+  NodeIterator(AssocTreeBase* tree, uint16_t start, bool isArray, uint32_t revision, size_t arrayIndex);
+  void advanceToValid();
+
+  AssocTreeBase* tree_ = nullptr;
+  uint16_t current_ = detail::kInvalidIndex;
+  bool isArray_ = false;
+  uint32_t revision_ = 0;
+  size_t arrayIndex_ = 0;
+};
+
+class NodeRange {
+ public:
+  NodeRange() = default;
+
+  NodeIterator begin() const;
+  NodeIterator end() const;
+  bool empty() const { return begin() == end(); }
+
+ private:
+  friend class NodeRef;
+  NodeRange(AssocTreeBase* tree, uint16_t firstChild, bool isArray, uint32_t revision);
+
+  AssocTreeBase* tree_ = nullptr;
+  uint16_t firstChild_ = detail::kInvalidIndex;
+  bool isArray_ = false;
+  uint32_t revision_ = 0;
+};
+
 class AssocTreeBase {
  public:
   AssocTreeBase(uint8_t* buffer, size_t totalBytes);
@@ -176,6 +252,9 @@ class AssocTreeBase {
 
  protected:
   friend class NodeRef;
+  friend class NodeEntry;
+  friend class NodeIterator;
+  friend class NodeRange;
   using Node = detail::Node;
   using NodeType = detail::NodeType;
   using StringSlot = detail::StringSlot;
