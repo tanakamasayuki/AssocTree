@@ -66,6 +66,13 @@ void loop() {}
 
 完成したスケッチは `examples/BasicUsage/BasicUsage.ino` を参照してください。
 
+## サンプル
+
+- `examples/Simple/Simple.ino` – 最小限の「Hello AssocTree」。
+- `examples/BasicUsage/BasicUsage.ino` – プロファイル情報とJSON出力。
+- `examples/ConfigManager/ConfigManager.ino` – `unset()` / `gc()` を活用する設定ストア。
+- `examples/ExternalBuffer/ExternalBuffer.ino` – `AssocTree<0>` と外部バッファ（PSRAM 等）の組み合わせ。
+
 ## 実行時バッファ版
 
 テンプレート引数を `0` にすると、外部バッファを渡して初期化できます。

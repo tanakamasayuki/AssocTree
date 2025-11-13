@@ -66,6 +66,13 @@ void loop() {}
 
 See `examples/BasicUsage/BasicUsage.ino` for the complete sketch.
 
+## Examples
+
+- `examples/Simple/Simple.ino` – minimal “hello AssocTree” using only a few bytes.
+- `examples/BasicUsage/BasicUsage.ino` – common profile data plus JSON dump.
+- `examples/ConfigManager/ConfigManager.ino` – runtime configuration store with `unset()` and `gc()`.
+- `examples/ExternalBuffer/ExternalBuffer.ino` – template `AssocTree<0>` fed by PSRAM or custom buffers.
+
 ## Runtime Buffer Variant
 
 When the template parameter is `0`, supply a buffer manually:
