@@ -57,7 +57,7 @@ void loop() {
   // ja: タイムスタンプ付きメッセージを追加
   static uint32_t tick = 0;
   String line = String("tick=") + tick++;
-  (*runtimeDoc)["logs"][tick % 10] = line.c_str();
+  (*runtimeDoc)["logs"][static_cast<size_t>(tick % 10)] = line.c_str();
 
   String json;
   if (runtimeDoc->toJson(json)) {
