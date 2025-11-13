@@ -10,18 +10,6 @@ namespace {
 
 constexpr size_t kNodeSize = sizeof(detail::Node);
 
-uint16_t remapIndex(
-    uint16_t index,
-    const std::vector<uint16_t>& map) {
-  if (index == detail::kInvalidIndex) {
-    return detail::kInvalidIndex;
-  }
-  if (index >= map.size()) {
-    return detail::kInvalidIndex;
-  }
-  return map[index];
-}
-
 }  // namespace
 
 NodeRef::NodeRef(AssocTreeBase* tree, uint16_t baseIndex, uint16_t attachedIndex)
@@ -31,12 +19,12 @@ NodeRef::NodeRef(AssocTreeBase* tree, uint16_t baseIndex, uint16_t attachedIndex
       revision_(tree ? tree->revision_ : 0) {}
 
 NodeRef NodeRef::operator[](const char* key) const {
-  std::string safeKey = key ? key : "";
-  return withAddedSegment(detail::LazySegment::forKey(std::move(safeKey)));
+  const char* safe = key ? key : "";
+  return withKeySegment(safe, std::strlen(safe));
 }
 
 NodeRef NodeRef::operator[](size_t index) const {
-  return withAddedSegment(detail::LazySegment::forIndex(index));
+  return withIndexSegment(index);
 }
 
 NodeRef NodeRef::operator[](int index) const {
@@ -183,7 +171,9 @@ void NodeRef::unset() {
   }
   tree_->detachNode(idx);
   attachedIndex_ = detail::kInvalidIndex;
-  pending_.clear();
+  pendingCount_ = 0;
+  keyBytesUsed_ = 0;
+  overflow_ = false;
   baseIndex_ = tree_->rootIndex();
 }
 
@@ -191,7 +181,7 @@ bool NodeRef::isAttached() const {
   if (!tree_) {
     return false;
   }
-  if (!pending_.empty()) {
+  if (pendingCount_ != 0) {
     return false;
   }
   if (attachedIndex_ == detail::kInvalidIndex) {
@@ -204,10 +194,13 @@ uint16_t NodeRef::ensureAttached() {
   if (!tree_) {
     return detail::kInvalidIndex;
   }
+  if (overflow_) {
+    return detail::kInvalidIndex;
+  }
   if (revision_ != tree_->revision_) {
     attachedIndex_ = detail::kInvalidIndex;
   }
-  if (pending_.empty()) {
+  if (pendingCount_ == 0) {
     if (attachedIndex_ != detail::kInvalidIndex) {
       touchRevision();
     }
@@ -216,11 +209,12 @@ uint16_t NodeRef::ensureAttached() {
   if (baseIndex_ == detail::kInvalidIndex) {
     baseIndex_ = tree_->rootIndex();
   }
-  uint16_t idx = tree_->ensurePath(baseIndex_, pending_);
+  uint16_t idx = tree_->ensurePath(baseIndex_, pendingPath());
   if (idx != detail::kInvalidIndex) {
     attachedIndex_ = idx;
     baseIndex_ = idx;
-    pending_.clear();
+    pendingCount_ = 0;
+    keyBytesUsed_ = 0;
     touchRevision();
   }
   return idx;
@@ -231,7 +225,10 @@ uint16_t NodeRef::resolveExisting() const {
   if (!tree) {
     return detail::kInvalidIndex;
   }
-  if (pending_.empty()) {
+  if (overflow_) {
+    return detail::kInvalidIndex;
+  }
+  if (pendingCount_ == 0) {
     if (attachedIndex_ != detail::kInvalidIndex &&
         revision_ == tree->revision_) {
       return attachedIndex_;
@@ -242,30 +239,84 @@ uint16_t NodeRef::resolveExisting() const {
   if (anchor == detail::kInvalidIndex) {
     anchor = tree->rootIndex();
   }
-  return tree->findExisting(anchor, pending_);
+  return tree->findExisting(anchor, pendingPath());
 }
 
 void NodeRef::touchRevision() {
   revision_ = tree_ ? tree_->revision_ : 0;
 }
 
-NodeRef NodeRef::withAddedSegment(detail::LazySegment seg) const {
+NodeRef NodeRef::withKeySegment(const char* key, size_t len) const {
   if (!tree_) {
     return *this;
   }
   NodeRef next = *this;
-  if (next.pending_.empty()) {
-    if (next.attachedIndex_ != detail::kInvalidIndex) {
-      next.baseIndex_ = next.attachedIndex_;
-      next.attachedIndex_ = detail::kInvalidIndex;
-    } else if (next.baseIndex_ == detail::kInvalidIndex) {
-      next.baseIndex_ = tree_->rootIndex();
-    }
-  } else if (next.baseIndex_ == detail::kInvalidIndex) {
-    next.baseIndex_ = tree_->rootIndex();
+  if (!prepareForSegment(next)) {
+    next.overflow_ = true;
+    return next;
   }
-  next.pending_.push_back(std::move(seg));
+  if (!appendKey(next, key, len)) {
+    next.overflow_ = true;
+    return next;
+  }
+  detail::LazySegment& seg = next.pending_[next.pendingCount_++];
+  seg.kind = detail::LazySegment::Kind::Key;
+  seg.keyOffset = next.keyBytesUsed_ - static_cast<uint16_t>(len);
+  seg.keyLength = static_cast<uint16_t>(len);
   return next;
+}
+
+NodeRef NodeRef::withIndexSegment(size_t index) const {
+  if (!tree_) {
+    return *this;
+  }
+  NodeRef next = *this;
+  if (!prepareForSegment(next)) {
+    next.overflow_ = true;
+    return next;
+  }
+  if (next.pendingCount_ >= ASSOCTREE_MAX_LAZY_SEGMENTS) {
+    next.overflow_ = true;
+    return next;
+  }
+  detail::LazySegment& seg = next.pending_[next.pendingCount_++];
+  seg.kind = detail::LazySegment::Kind::Index;
+  seg.index = index;
+  return next;
+}
+
+bool NodeRef::prepareForSegment(NodeRef& ref) const {
+  if (ref.pendingCount_ == 0) {
+    if (ref.attachedIndex_ != detail::kInvalidIndex) {
+      ref.baseIndex_ = ref.attachedIndex_;
+      ref.attachedIndex_ = detail::kInvalidIndex;
+    } else if (ref.baseIndex_ == detail::kInvalidIndex) {
+      ref.baseIndex_ = tree_ ? tree_->rootIndex() : detail::kInvalidIndex;
+    }
+  } else if (ref.baseIndex_ == detail::kInvalidIndex) {
+    ref.baseIndex_ = tree_ ? tree_->rootIndex() : detail::kInvalidIndex;
+  }
+  return ref.pendingCount_ < ASSOCTREE_MAX_LAZY_SEGMENTS;
+}
+
+bool NodeRef::appendKey(NodeRef& ref, const char* key, size_t len) const {
+  if (len > ASSOCTREE_LAZY_KEY_BYTES) {
+    return false;
+  }
+  if (ref.keyBytesUsed_ + len > ASSOCTREE_LAZY_KEY_BYTES) {
+    return false;
+  }
+  std::memcpy(ref.keyStorage_ + ref.keyBytesUsed_, key, len);
+  ref.keyBytesUsed_ += static_cast<uint16_t>(len);
+  return true;
+}
+
+detail::LazyPathRef NodeRef::pendingPath() const {
+  detail::LazyPathRef ref;
+  ref.segments = pending_;
+  ref.count = pendingCount_;
+  ref.keyStorage = keyStorage_;
+  return ref;
 }
 
 AssocTreeBase::AssocTreeBase(uint8_t* buffer, size_t totalBytes)
@@ -441,14 +492,13 @@ void AssocTreeBase::setNodeString(Node& node, const char* data, size_t len) {
   node.value.asString = slot;
 }
 
-uint16_t AssocTreeBase::ensurePath(
-    uint16_t baseIndex,
-    const std::vector<detail::LazySegment>& segments) {
-  if (segments.empty()) {
+uint16_t AssocTreeBase::ensurePath(uint16_t baseIndex, detail::LazyPathRef path) {
+  if (!path.segments || path.count == 0) {
     return baseIndex;
   }
   uint16_t current = baseIndex;
-  for (const auto& segment : segments) {
+  for (size_t i = 0; i < path.count; ++i) {
+    const auto& segment = path.segments[i];
     Node* parent = nodeAt(current);
     if (!parent) {
       return detail::kInvalidIndex;
@@ -460,7 +510,8 @@ uint16_t AssocTreeBase::ensurePath(
       if (parent->type != NodeType::Object) {
         return detail::kInvalidIndex;
       }
-      uint16_t child = findChildByKey(current, segment.key);
+      const char* key = path.keyData(segment);
+      uint16_t child = findChildByKey(current, key, segment.keyLength);
       if (child == detail::kInvalidIndex) {
         child = appendChild(current);
         if (child == detail::kInvalidIndex) {
@@ -471,7 +522,7 @@ uint16_t AssocTreeBase::ensurePath(
           return detail::kInvalidIndex;
         }
         node->type = NodeType::Null;
-        node->key = storeString(segment.key.c_str(), segment.key.size());
+        node->key = storeString(key, segment.keyLength);
         if (!node->key.valid()) {
           detachNode(child);
           return detail::kInvalidIndex;
@@ -511,16 +562,15 @@ uint16_t AssocTreeBase::ensurePath(
   return current;
 }
 
-uint16_t AssocTreeBase::findExisting(
-    uint16_t baseIndex,
-    const std::vector<detail::LazySegment>& segments) const {
-  if (segments.empty()) {
+uint16_t AssocTreeBase::findExisting(uint16_t baseIndex, detail::LazyPathRef path) const {
+  if (!path.segments || path.count == 0) {
     return baseIndex;
   }
   uint16_t current = baseIndex;
-  for (const auto& segment : segments) {
+  for (size_t i = 0; i < path.count; ++i) {
+    const auto& segment = path.segments[i];
     current = (segment.kind == detail::LazySegment::Kind::Key)
-                  ? findChildByKey(current, segment.key)
+                  ? findChildByKey(current, path.keyData(segment), segment.keyLength)
                   : findChildByIndex(current, segment.index);
     if (current == detail::kInvalidIndex) {
       return detail::kInvalidIndex;
@@ -625,7 +675,7 @@ AssocTreeBase::StringSlot AssocTreeBase::storeString(const char* data, size_t le
     return slot;
   }
   strTop_ -= bytes;
-  std::memcpy(buffer_ + strTop_, data, len);
+  std::memmove(buffer_ + strTop_, data, len);
   buffer_[strTop_ + len] = '\0';
   slot.offset = static_cast<uint16_t>(strTop_);
   slot.length = static_cast<uint16_t>(len);
@@ -634,7 +684,8 @@ AssocTreeBase::StringSlot AssocTreeBase::storeString(const char* data, size_t le
 
 uint16_t AssocTreeBase::findChildByKey(
     uint16_t parentIndex,
-    const std::string& key) const {
+    const char* key,
+    size_t len) const {
   const Node* parent = nodeAt(parentIndex);
   if (!parent || !parent->used || parent->type != NodeType::Object) {
     return detail::kInvalidIndex;
@@ -646,9 +697,9 @@ uint16_t AssocTreeBase::findChildByKey(
       break;
     }
     if (node->used && node->key.valid() &&
-        node->key.length == key.size()) {
+        node->key.length == len) {
       const char* stored = stringAt(node->key);
-      if (std::memcmp(stored, key.data(), key.size()) == 0) {
+      if (stored && std::memcmp(stored, key, len) == 0) {
         return child;
       }
     }
@@ -834,26 +885,47 @@ void AssocTreeBase::appendEscapedString(
 }
 
 void AssocTreeBase::markReachable(uint16_t index) {
-  if (index == detail::kInvalidIndex) {
+  uint16_t current = index;
+  bool backtracking = false;
+  while (current != detail::kInvalidIndex) {
+    Node* node = nodeAt(current);
+    if (!node || !node->used) {
+      break;
+    }
+    if (!backtracking && !node->mark) {
+      node->mark = 1;
+      if (node->firstChild != detail::kInvalidIndex) {
+        current = node->firstChild;
+        continue;
+      }
+    }
+    backtracking = false;
+    if (node->nextSibling != detail::kInvalidIndex) {
+      current = node->nextSibling;
+    } else {
+      current = node->parent;
+      backtracking = true;
+    }
+  }
+}
+
+void AssocTreeBase::updateReferences(uint16_t limit, uint16_t from, uint16_t to) {
+  if (from == to) {
     return;
   }
-  std::vector<uint16_t> stack;
-  stack.push_back(index);
-  while (!stack.empty()) {
-    uint16_t current = stack.back();
-    stack.pop_back();
-    Node* node = nodeAt(current);
-    if (!node || !node->used || node->mark) {
+  for (uint16_t i = 0; i < limit; ++i) {
+    Node* node = nodeAt(i);
+    if (!node || !node->used) {
       continue;
     }
-    node->mark = 1;
-    uint16_t child = node->firstChild;
-    while (child != detail::kInvalidIndex) {
-      Node* c = nodeAt(child);
-      if (c && c->used) {
-        stack.push_back(child);
-      }
-      child = c ? c->nextSibling : detail::kInvalidIndex;
+    if (node->parent == from) {
+      node->parent = to;
+    }
+    if (node->firstChild == from) {
+      node->firstChild = to;
+    }
+    if (node->nextSibling == from) {
+      node->nextSibling = to;
     }
   }
 }
@@ -862,74 +934,65 @@ void AssocTreeBase::compactNodes() {
   if (!buffer_) {
     return;
   }
-  std::vector<uint16_t> remap(nodeCount_, detail::kInvalidIndex);
+  const uint16_t originalCount = nodeCount_;
   uint16_t write = 0;
-  for (uint16_t i = 0; i < nodeCount_; ++i) {
-    Node* node = nodeAt(i);
-    if (!node || !node->used || !node->mark) {
+  for (uint16_t read = 0; read < originalCount; ++read) {
+    Node* node = nodeAt(read);
+    if (!node) {
       continue;
     }
-    remap[i] = write;
-    if (write != i) {
+    if (!node->used || !node->mark) {
+      node->used = 0;
+      node->mark = 0;
+      continue;
+    }
+    if (write != read) {
       Node* target = nodeAt(write);
       if (target) {
         *target = *node;
       }
+      updateReferences(originalCount, read, write);
     }
-    Node* updated = nodeAt(write);
-    if (updated) {
-      updated->mark = 0;
+    Node* target = nodeAt(write);
+    if (target) {
+      target->mark = 0;
     }
     ++write;
   }
   nodeCount_ = write;
   nodeTop_ = static_cast<size_t>(nodeCount_) * kNodeSize;
-  for (uint16_t i = 0; i < nodeCount_; ++i) {
-    Node* node = nodeAt(i);
-    if (!node) {
-      continue;
-    }
-    node->parent = remapIndex(node->parent, remap);
-    node->firstChild = remapIndex(node->firstChild, remap);
-    node->nextSibling = remapIndex(node->nextSibling, remap);
-  }
 }
 
 void AssocTreeBase::compactStrings() {
   if (!buffer_) {
     return;
   }
-  std::vector<StringSlot*> slots;
-  slots.reserve(nodeCount_ * 2);
+  strTop_ = totalBytes_;
   for (uint16_t i = 0; i < nodeCount_; ++i) {
     Node* node = nodeAt(i);
     if (!node) {
       continue;
     }
     if (node->key.valid()) {
-      slots.push_back(&node->key);
+      const char* data = stringAt(node->key);
+      if (data) {
+        node->key = storeString(data, node->key.length);
+      } else {
+        node->key.invalidate();
+      }
     }
     if (node->type == NodeType::String && node->value.asString.valid()) {
-      slots.push_back(&node->value.asString);
+      const char* data = stringAt(node->value.asString);
+      if (data) {
+        node->value.asString = storeString(data, node->value.asString.length);
+      } else {
+        node->value.asString.invalidate();
+      }
     }
   }
-  std::sort(
-      slots.begin(),
-      slots.end(),
-      [](const StringSlot* a, const StringSlot* b) { return a->offset > b->offset; });
-  size_t newStrTop = totalBytes_;
-  for (StringSlot* slot : slots) {
-    size_t len = slot->length;
-    size_t bytes = len + 1;
-    if (newStrTop < bytes || slot->offset + bytes > totalBytes_) {
-      slot->invalidate();
-      continue;
-    }
-    newStrTop -= bytes;
-    std::memmove(buffer_ + newStrTop, buffer_ + slot->offset, bytes);
-    slot->offset = static_cast<uint16_t>(newStrTop);
+  if (strTop_ < nodeTop_) {
+    strTop_ = nodeTop_;
   }
-  strTop_ = std::max(newStrTop, nodeTop_);
 }
 
 }  // namespace assoc_tree

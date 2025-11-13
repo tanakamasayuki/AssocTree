@@ -5,7 +5,14 @@
 #include <string>
 #include <type_traits>
 #include <utility>
-#include <vector>
+
+#ifndef ASSOCTREE_MAX_LAZY_SEGMENTS
+#define ASSOCTREE_MAX_LAZY_SEGMENTS 16
+#endif
+
+#ifndef ASSOCTREE_LAZY_KEY_BYTES
+#define ASSOCTREE_LAZY_KEY_BYTES 256
+#endif
 
 #ifdef ARDUINO
 #include <Arduino.h>
@@ -68,21 +75,18 @@ struct LazySegment {
   enum class Kind : uint8_t { Key, Index };
 
   Kind kind = Kind::Key;
-  std::string key;
+  uint16_t keyOffset = 0;
+  uint16_t keyLength = 0;
   size_t index = 0;
+};
 
-  static LazySegment forKey(std::string k) {
-    LazySegment seg;
-    seg.kind = Kind::Key;
-    seg.key = std::move(k);
-    return seg;
-  }
+struct LazyPathRef {
+  const LazySegment* segments = nullptr;
+  size_t count = 0;
+  const uint8_t* keyStorage = nullptr;
 
-  static LazySegment forIndex(size_t idx) {
-    LazySegment seg;
-    seg.kind = Kind::Index;
-    seg.index = idx;
-    return seg;
+  const char* keyData(const LazySegment& seg) const {
+    return reinterpret_cast<const char*>(keyStorage + seg.keyOffset);
   }
 };
 
@@ -140,12 +144,20 @@ class NodeRef {
   uint16_t baseIndex_ = detail::kInvalidIndex;
   uint16_t attachedIndex_ = detail::kInvalidIndex;
   uint32_t revision_ = 0;
-  std::vector<detail::LazySegment> pending_;
+  uint8_t pendingCount_ = 0;
+  uint16_t keyBytesUsed_ = 0;
+  detail::LazySegment pending_[ASSOCTREE_MAX_LAZY_SEGMENTS];
+  uint8_t keyStorage_[ASSOCTREE_LAZY_KEY_BYTES]{};
+  bool overflow_ = false;
 
   uint16_t ensureAttached();
   uint16_t resolveExisting() const;
   void touchRevision();
-  NodeRef withAddedSegment(detail::LazySegment seg) const;
+  NodeRef withKeySegment(const char* key, size_t len) const;
+  NodeRef withIndexSegment(size_t index) const;
+  bool prepareForSegment(NodeRef& ref) const;
+  bool appendKey(NodeRef& ref, const char* key, size_t len) const;
+  detail::LazyPathRef pendingPath() const;
 };
 
 class AssocTreeBase {
@@ -181,8 +193,8 @@ class AssocTreeBase {
   void setNodeDouble(Node& node, double value);
   void setNodeString(Node& node, const char* data, size_t len);
 
-  uint16_t ensurePath(uint16_t baseIndex, const std::vector<detail::LazySegment>& segments);
-  uint16_t findExisting(uint16_t baseIndex, const std::vector<detail::LazySegment>& segments) const;
+  uint16_t ensurePath(uint16_t baseIndex, detail::LazyPathRef path);
+  uint16_t findExisting(uint16_t baseIndex, detail::LazyPathRef path) const;
 
   void detachNode(uint16_t nodeIndex);
 
@@ -190,12 +202,13 @@ class AssocTreeBase {
   uint16_t appendChild(uint16_t parentIndex);
   uint16_t createNode();
   StringSlot storeString(const char* data, size_t len);
-  uint16_t findChildByKey(uint16_t parentIndex, const std::string& key) const;
+  uint16_t findChildByKey(uint16_t parentIndex, const char* key, size_t len) const;
   uint16_t findChildByIndex(uint16_t parentIndex, size_t targetIndex) const;
   size_t countChildren(uint16_t parentIndex) const;
   bool writeJsonNode(std::string& out, uint16_t nodeIndex) const;
   void appendEscapedString(std::string& out, const char* data, size_t len) const;
   void markReachable(uint16_t index);
+  void updateReferences(uint16_t limit, uint16_t from, uint16_t to);
   void compactNodes();
   void compactStrings();
 
