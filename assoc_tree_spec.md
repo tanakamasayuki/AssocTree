@@ -1,35 +1,28 @@
-# AssocTree 仕様書（完全版・日本語）
+# AssocTree Specification (English)
 
-## 1. 概要
+## 1. Overview
 
-**AssocTree** は、マイクロコントローラや組込み環境向けに設計された、  
-柔軟な「連想配列（PHP / Python の dict 的）」メモリストレージです。
+AssocTree is a flexible associative-memory storage designed for microcontrollers and embedded systems. It mimics PHP/Python-like arrays on a static memory pool with safe read/write semantics, lazy node creation, manual garbage collection, and optional JSON output.
 
-特徴:
+Key traits:
 
-- 総メモリ量（TOTAL_BYTES）だけを指定すれば使用可能
-- メモリは Node と String 領域に動的に分配される（境界可変）
-- 階層構造（オブジェクト、配列、混在構造）に対応
-- `operator[]` は遅延パス（LazyPath）を返し、書き込み時だけノードを確保
-- 読み取りはノードを生成しない（安全・副作用なし）
-- PHP の `unset()` 的なキー削除に対応
-- 必要なときのみ `gc()` による手動ガーベジコレクション
-- 任意で JSON 出力も可能（デバッグ用途）
-
-AssocTree は JSON 専用データ構造ではなく、  
-**「PHP の配列」「Python の dict」** を静的メモリ上で安全に扱うための軽量ツリーです。
+- Only the total memory size (`TOTAL_BYTES`) is required to start.
+- Memory is split dynamically between Node and String regions.
+- Supports mixed hierarchies (objects, arrays).
+- `operator[]` returns a lazy path; nodes are materialized only on assignment.
+- Read operations have zero side effects.
+- Supports `unset()`-style deletions with optional GC to reclaim memory.
+- Optional JSON serialization for debugging.
 
 ---
 
-## 2. メモリ構造
+## 2. Memory Layout
 
-### 2.1 ユーザーが指定するのは総メモリ量のみ
+### 2.1 Static template size
 
 ```cpp
 AssocTree<2048> doc;
 ```
-
-内部では以下のように扱われます：
 
 ```
 rawPool[0]                                  rawPool[TOTAL_BYTES-1]
@@ -40,26 +33,25 @@ rawPool[0]                                  rawPool[TOTAL_BYTES-1]
        nodeTop                    strTop
 ```
 
-- Node は先頭側から連番で配置  
-- 文字列は末尾側から逆向きに配置  
-- `nodeTop > strTop` になった時点でメモリ不足
+- Nodes are allocated from the head; strings grow from the tail.
+- Memory runs out when `nodeTop > strTop`.
 
-### 2.2 実行時バッファの受け取り
+### 2.2 Runtime buffer injection
 
-テンプレート引数を `0` にすると、コンストラクタでユーザーが用意したバッファとサイズを渡して初期化できます。
+Set the template parameter to `0` to provide your own buffer and size:
 
 ```cpp
-static uint8_t pool[4096];
+uint8_t pool[4096];
 AssocTree<0> doc(pool, sizeof(pool));
 ```
 
-ESP32 の PSRAM など、特殊なメモリ確保方法を利用したい場合に有効です。対応するバッファサイズは 16 ビット（最大 65535 バイト）までを推奨します。
+This is useful for PSRAM or custom allocators on ESP32. Buffers up to 16-bit length (~65535 bytes) are recommended.
 
 ---
 
-## 3. Node モデル
+## 3. Node Model
 
-各 Node は以下の情報を持ちます：
+Each node stores:
 
 ```
 Node {
@@ -68,7 +60,7 @@ Node {
     uint16_t  firstChild;
     uint16_t  nextSibling;
 
-    StringSlot key;        // Object のキー（offset + length）
+    StringSlot key;        // object key (offset + length)
 
     union {
         bool      b;
@@ -77,19 +69,16 @@ Node {
         StringSlot str;
     } value;
 
-    uint8_t used : 1;      // スロットが使用中か
-    uint8_t mark : 1;      // GC 用
+    uint8_t used : 1;      // slot in use
+    uint8_t mark : 1;      // GC mark
 };
 ```
 
-ツリー構造は  
-**parent / firstChild / nextSibling** の 3 ポインタで実現されます。
+The tree is navigated via `parent/firstChild/nextSibling`.
 
 ---
 
-## 4. 文字列モデル
-
-文字列は以下の構造で表されます：
+## 4. String Slot
 
 ```
 StringSlot {
@@ -98,180 +87,121 @@ StringSlot {
 }
 ```
 
-末尾側から確保され、`strTop` を前に押し出して詰めていきます。
+Strings are allocated from the tail (`strTop` backwards). GC compacts them on demand.
 
 ---
 
-## 5. NodeRef（参照）と遅延パス（LazyPath）
+## 5. NodeRef and LazyPath
 
-### 5.1 `operator[]` はノードを生成しない
+### 5.1 `operator[]` does not allocate immediately
 
 ```cpp
 auto r = doc["user"]["name"];
 ```
 
-この時点ではノードは生成されず、  
-**親ノードの情報＋キー情報のみ**を持つ LazyPath が構築されます。
+At this point no node is created; only a lightweight LazyPath is stored.
 
-### 5.2 LazyPath の固定バッファ制限
+### 5.2 Fixed buffer constraints
 
-静的メモリのみで完結させるため、LazyPath は内部固定バッファを利用し以下の制限を持ちます。
+To avoid dynamic allocation, LazyPath stores segments and key bytes in fixed buffers:
 
-- セグメント数（`["key"]` や `[idx]` のチェーン）は `ASSOCTREE_MAX_LAZY_SEGMENTS` 個まで（デフォルト 16）
-- 文字列キーは合計 `ASSOCTREE_LAZY_KEY_BYTES` バイトまで（デフォルト 256 バイト）
+- Maximum segments per path: `ASSOCTREE_MAX_LAZY_SEGMENTS` (default 16)
+- Total key bytes stored across the path: `ASSOCTREE_LAZY_KEY_BYTES` (default 256)
 
-具体的には、以下のようなケースでエラー（NodeRef が無効化され、`operator=` 等も失敗）となります。
+Errors occur when:
 
-- `doc["a"]["b"]["c"]...` のように 17 個以上の `operator[]` をチェーンした場合  
-- `doc["very_long_key_..."]` のように、LazyPath 内で保持するキー文字列の総バイト数が 257 バイト以上に達した場合  
-- 上記制限を超えた後にさらに `operator=` や `as<T>()` などを呼び出した場合
+- You chain more than 16 `operator[]` calls (`doc["a"]["b"]...`)
+- Total key size exceeds 256 bytes
+- After hitting the limit, you attempt `operator=` or `as<T>()`
 
-必要に応じて `ASSOCTREE_MAX_LAZY_SEGMENTS` / `ASSOCTREE_LAZY_KEY_BYTES` マクロを増やすことで対応できますが、値を増やすほど NodeRef のコピーサイズも大きくなる点に注意してください。
+Increase the macros if deeper paths or longer keys are required (note: NodeRef size increases).
 
 ---
 
-## 6. 遅延確保（operator=）
+## 6. Lazy allocation (`operator=`)
 
 ```cpp
 doc["a"]["b"][0]["c"] = 100;
 ```
 
-`operator=` が呼ばれたタイミングで：
+On assignment:
 
-1. LazyPath を root から順にたどる  
-2. 必要ノードが存在しなければ作成（Object / Array 含む）  
-3. 最終ノードに値を書き込む  
-4. NodeRef を Attached 状態に更新
+1. Traverse LazyPath from root.
+2. Create intermediate nodes (objects/arrays) only if missing.
+3. Write the value to the final node.
+4. Mark the NodeRef as attached.
 
 ---
 
-## 7. 読み取り（副作用なし）
-
-### 7.1 as<T>()
+## 7. Reads (`as<T>`, `operator bool`)
 
 ```cpp
 int v = doc["config"]["threshold"].as<int>(0);
 ```
 
-- ノードが存在する場合 → 値を返す  
-- 存在しない場合 → default 値を返す  
-- ノード生成は行わない  
-
----
-
-### 7.2 operator bool()
+- Returns stored value, or default if missing.
+- No nodes are created.
 
 ```cpp
 if (doc["flags"]["debug"]) { ... }
 ```
 
-仕様：
-
-- ノードを探索し、存在しなければ false  
-- 存在する場合は型に応じて真偽値変換  
-- ノードの自動生成は行わない  
-- 暗黙変換は bool のみ許可（int や double には変換しない）
+`operator bool()` simply checks existence and truthiness; it's marked `explicit` so no implicit conversions to other numeric types happen.
 
 ---
 
-## 8. 削除（unset）
-
-AssocTree におけるキー削除は：
+## 8. Deletion (`unset`)
 
 ```cpp
 doc["user"]["name"].unset();
 ```
 
-挙動：
+Behavior:
 
-- 親の child/sibling リンクから除外  
-- ノードは `used=0` になり、空きスロットとして即座に再利用可能  
-- 実メモリの片付けは GC が実行されたタイミングでのみ行われる  
-
----
-
-## 9. ガーベジコレクション（gc）
-
-`doc.gc()` により、以下が行われます：
-
-### 9.1 マークフェーズ  
-root からすべての到達可能ノードに mark=1 を付与。
-
-### 9.2 ノード圧縮  
-- mark=1 のノードのみ前詰め  
-- oldIndex → newIndex の変換マップを作成  
-- すべてのリンクを更新  
-- nodeCount を実ノード数に縮小
-
-### 9.3 文字列圧縮  
-- 生きている文字列を移動  
-- 各 offset を更新  
-- strTop を再設定
-
-### 9.4 結果  
-- メモリの断片化が完全解消  
-- `freeBytes()` の戻り値が最大化  
-- NodeRef（Attached）は失効（再取得が必要）
+- Remove from parent’s child/sibling chain.
+- Mark node as unused (`used=0`), making the slot immediately reusable.
+- Actual memory cleanup occurs only during `gc()`.
 
 ---
 
-## 10. ユーティリティ
+## 9. Garbage Collection (`gc`)
 
-### freeBytes()
-
-```cpp
-size_t freeBytes() const {
-    return (strTop > nodeTop) ? (strTop - nodeTop) : 0;
-}
-```
-
-残りメモリはこの関数のみで管理すればよい。
+1. **Mark**: traverse from root, marking reachable nodes.
+2. **Node compaction**: shift live nodes toward the head; update links.
+3. **String compaction**: reinsert surviving strings tail-first to remove fragmentation.
+4. **Result**: maximum `freeBytes()`; previously attached NodeRefs become invalid.
 
 ---
 
-## 11. API 使用例
+## 10. Utility
 
-### 書き込み
+`size_t freeBytes() const` returns remaining bytes between `nodeTop` and `strTop`.
+
+---
+
+## 11. Example API usage
+
 ```cpp
 doc["user"]["name"] = "Taro";
 doc["user"]["age"] = 20;
-```
 
-### 読み取り
-```cpp
 int age = doc["user"]["age"].as<int>(0);
-
 if (doc["flags"]["debug"]) {
     ...
 }
-```
 
-### 削除（unset）
-```cpp
 doc["user"]["name"].unset();
-```
-
-### GC
-```cpp
 doc.gc();
 ```
 
 ---
 
-## 12. 設計方針まとめ
+## 12. Design Summary
 
-- PHP/Python の連想配列に近い柔軟な構造
-- 静的メモリのみ、高速・安全
-- 読み取りは副作用ゼロ
-- 書き込みは遅延確保
-- ノードと文字列の動的境界管理
-- 手動 GC による完全圧縮
-- JSON 出力はデバッグ用のオプション
+- PHP/Python-like associative arrays on static memory
+- Lazy writes, side-effect-free reads
+- Adjustable boundary between node/string regions
+- Manual GC to eliminate fragmentation
+- Optional JSON output for debugging
 
 ---
-
-## 13. 一文でまとめると
-
-**AssocTree は、静的メモリ上で動作する柔軟な連想配列ツリー。  
-operator[] は遅延パスを返し、書き込み時にだけノードを生成。  
-読み取りは副作用ゼロ。GC により断片化を完全解消する。**

@@ -1,6 +1,6 @@
 # AssocTree
 
-[日本語はこちら](README.ja.md)
+[日本語はこちら](README.ja.md) / [Japanese Spec](assoc_tree_spec.ja.md) / [English Spec](assoc_tree_spec.md)
 
 AssocTree is a static-memory associative tree designed for Arduino/ESP32 and other embedded targets. It offers PHP/Python-like flexible key/value structures while keeping the entire data set inside a user-provided buffer, enabling deterministic RAM usage even on MCUs without heap allocation.
 

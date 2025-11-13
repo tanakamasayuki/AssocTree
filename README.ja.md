@@ -1,6 +1,6 @@
 # AssocTree
 
-[English README](README.md)
+[English README](README.md) / [English Spec](assoc_tree_spec.md) / [日本語仕様](assoc_tree_spec.ja.md)
 
 AssocTree は Arduino / ESP32 を含む組込み環境向けの静的メモリ連想ツリーです。PHP / Python の連想配列的な柔軟さを維持しつつ、ユーザーが用意した固定バッファ内だけで完結するように設計されています。
 
@@ -92,7 +92,7 @@ PSRAM や `heap_caps_malloc` を用いた独自アロケータと組み合わせ
 - `bool AssocTree::toJson(std::string& out)` / `bool toJson(String& out)`  
   デバッグ用に JSON を生成。
 
-詳細仕様は [`assoc_tree_spec.md`](assoc_tree_spec.md) にまとめています。
+詳細仕様は [`assoc_tree_spec.ja.md`](assoc_tree_spec.ja.md) にまとめています。
 
 ## 現状とコントリビュート
 
