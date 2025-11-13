@@ -116,6 +116,37 @@ Errors occur when:
 
 Increase the macros if deeper paths or longer keys are required (note: NodeRef size increases).
 
+### 5.3 Iterator-style traversal
+
+To enumerate children of an object/array without building new NodeRefs manually, provide lightweight iterators:
+
+- `NodeRange` – returned by `NodeRef::children()`, exposes `begin()/end()`.
+- `NodeIterator` – forward iterator storing `uint16_t currentIndex` plus a pointer to `AssocTreeBase`. Read-only, no allocation.
+- `NodeEntry` – value type returned by `operator*`:
+  - Objects: `const char* key()` accesses the key string.
+  - Arrays: `size_t index()` reports the 0-based index.
+  - `NodeRef value()` returns a read-only NodeRef for the child.
+
+Usage examples:
+
+```cpp
+for (auto entry : doc["settings"].children()) {
+    Serial.println(entry.key());
+    Serial.println(entry.value().as<int>(0));
+}
+
+for (auto entry : doc["values"].children()) {
+    Serial.println(entry.index());
+    Serial.println(entry.value().as<double>(0.0));
+}
+```
+
+Notes:
+
+- If the target node is neither object nor array, `children()` returns an empty range.
+- GC or writes invalidate iterators just like NodeRefs (*revision*-based safety checks apply).
+- No dynamic allocation: iterators only store indexes/pointers.
+
 ---
 
 ## 6. Lazy allocation (`operator=`)

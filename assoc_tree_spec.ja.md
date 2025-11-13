@@ -128,6 +128,37 @@ auto r = doc["user"]["name"];
 
 必要に応じて `ASSOCTREE_MAX_LAZY_SEGMENTS` / `ASSOCTREE_LAZY_KEY_BYTES` マクロを増やすことで対応できますが、値を増やすほど NodeRef のコピーサイズも大きくなる点に注意してください。
 
+### 5.3 イテレータ的な参照
+
+NodeRef からオブジェクト／配列の子要素を列挙できる軽量イテレータ機能を提供します。
+
+- `NodeRange` … `NodeRef::children()` が返すビュー。`begin()/end()` を備える。
+- `NodeIterator` … `uint16_t` インデックスを保持する前進イテレータ。読み取り専用。
+- `NodeEntry` … イテレータの `operator*` が返す値で、以下を提供：
+  - オブジェクトの場合: `const char* key()` でキー文字列を参照
+  - 配列の場合: `size_t index()` で 0 始まりインデックスを取得
+  - `NodeRef value()` で該当ノードを参照（`as<T>()`, `children()` など利用可）
+
+利用例:
+
+```cpp
+for (auto entry : doc["settings"].children()) {
+    Serial.println(entry.key());
+    Serial.println(entry.value().as<int>(0));
+}
+
+for (auto entry : doc["values"].children()) {
+    Serial.println(entry.index());
+    Serial.println(entry.value().as<double>(0.0));
+}
+```
+
+注意点:
+
+- 対象がオブジェクト／配列以外の場合 `children()` は空 Range を返す。
+- GC や書き込みが走ると従来の NodeRef 同様にイテレータも無効化される。`revision` を比較しつつ安全に扱う必要あり。
+- 動的確保は行わない設計とし、`NodeIterator` は `AssocTreeBase*` とノードインデックスのみを持つ。
+
 ---
 
 ## 6. 遅延確保（operator=）
