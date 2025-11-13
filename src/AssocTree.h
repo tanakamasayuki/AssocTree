@@ -136,6 +136,21 @@ class NodeRef {
   const char* asCString(const char* defaultValue = nullptr) const;
   explicit operator bool() const;
 
+  bool exists() const;
+  bool isNull() const;
+  bool isBool() const;
+  bool isInt() const;
+  bool isDouble() const;
+  bool isString() const;
+  bool isObject() const;
+  bool isArray() const;
+  detail::NodeType type() const;
+  size_t size() const;
+  bool contains(const char* key) const;
+  bool contains(size_t index) const;
+  bool append(const NodeRef& value);
+  void clear();
+
   void unset();
 
   bool isAttached() const;

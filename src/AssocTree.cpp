@@ -164,6 +164,127 @@ NodeRef::operator bool() const {
   }
 }
 
+bool NodeRef::exists() const {
+  return resolveExisting() != detail::kInvalidIndex;
+}
+
+detail::NodeType NodeRef::type() const {
+  uint16_t idx = resolveExisting();
+  if (idx == detail::kInvalidIndex || !tree_) {
+    return detail::NodeType::Null;
+  }
+  const detail::Node* node = tree_->nodeAt(idx);
+  return node ? node->type : detail::NodeType::Null;
+}
+
+#define ASSOCTREE_DEFINE_TYPE_CHECK(NAME, ENUM)           \
+  bool NodeRef::NAME() const {                            \
+    return type() == detail::NodeType::ENUM;              \
+  }
+
+ASSOCTREE_DEFINE_TYPE_CHECK(isNull, Null)
+ASSOCTREE_DEFINE_TYPE_CHECK(isBool, Bool)
+ASSOCTREE_DEFINE_TYPE_CHECK(isInt, Int)
+ASSOCTREE_DEFINE_TYPE_CHECK(isDouble, Double)
+ASSOCTREE_DEFINE_TYPE_CHECK(isString, String)
+ASSOCTREE_DEFINE_TYPE_CHECK(isObject, Object)
+ASSOCTREE_DEFINE_TYPE_CHECK(isArray, Array)
+
+#undef ASSOCTREE_DEFINE_TYPE_CHECK
+
+size_t NodeRef::size() const {
+  uint16_t idx = resolveExisting();
+  if (idx == detail::kInvalidIndex || !tree_) {
+    return 0;
+  }
+  const detail::Node* node = tree_->nodeAt(idx);
+  if (!node) {
+    return 0;
+  }
+  if (node->type != detail::NodeType::Object &&
+      node->type != detail::NodeType::Array) {
+    return 0;
+  }
+  return tree_->countChildren(idx);
+}
+
+bool NodeRef::contains(const char* key) const {
+  if (!tree_ || !key) {
+    return false;
+  }
+  uint16_t idx = resolveExisting();
+  if (idx == detail::kInvalidIndex) {
+    return false;
+  }
+  const detail::Node* node = tree_->nodeAt(idx);
+  if (!node || node->type != detail::NodeType::Object) {
+    return false;
+  }
+  return tree_->findChildByKey(idx, key, std::strlen(key)) != detail::kInvalidIndex;
+}
+
+bool NodeRef::contains(size_t index) const {
+  if (!tree_) {
+    return false;
+  }
+  uint16_t idx = resolveExisting();
+  if (idx == detail::kInvalidIndex) {
+    return false;
+  }
+  const detail::Node* node = tree_->nodeAt(idx);
+  if (!node || node->type != detail::NodeType::Array) {
+    return false;
+  }
+  return tree_->findChildByIndex(idx, index) != detail::kInvalidIndex;
+}
+
+bool NodeRef::append(const NodeRef& value) {
+  if (!tree_) {
+    return false;
+  }
+  uint16_t idx = ensureAttached();
+  if (idx == detail::kInvalidIndex) {
+    return false;
+  }
+  detail::Node* node = tree_->nodeAt(idx);
+  if (!node) {
+    return false;
+  }
+  if (node->type == detail::NodeType::Null) {
+    node->type = detail::NodeType::Array;
+  }
+  if (node->type != detail::NodeType::Array) {
+    return false;
+  }
+  size_t currentSize = tree_->countChildren(idx);
+  NodeRef slot = (*this)[currentSize];
+  slot = value;
+  return true;
+}
+
+void NodeRef::clear() {
+  if (!tree_) {
+    return;
+  }
+  uint16_t idx = resolveExisting();
+  if (idx == detail::kInvalidIndex) {
+    return;
+  }
+  detail::Node* node = tree_->nodeAt(idx);
+  if (!node) {
+    return;
+  }
+  uint16_t child = node->firstChild;
+  while (child != detail::kInvalidIndex) {
+    detail::Node* c = tree_->nodeAt(child);
+    uint16_t next = c ? c->nextSibling : detail::kInvalidIndex;
+    if (c && c->used) {
+      tree_->detachNode(child);
+    }
+    child = next;
+  }
+}
+
 void NodeRef::unset() {
   uint16_t idx = resolveExisting();
   if (idx == detail::kInvalidIndex) {
