@@ -130,7 +130,7 @@ class NodeRef {
   T as(const T& defaultValue) const;
 
   const char* asCString(const char* defaultValue = nullptr) const;
-  operator bool() const;
+  explicit operator bool() const;
 
   void unset();
 
