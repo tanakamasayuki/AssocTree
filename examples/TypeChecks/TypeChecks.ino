@@ -3,28 +3,39 @@
 
 // en: Demonstrates type() / isXXX() / exists()
 // ja: type() / isXXX() / exists() の使用例
-AssocTree<1024> typeDoc;
 
-void printType(const char* path, const NodeRef& ref) {
+void printType(const char *path, const NodeRef &ref)
+{
   Serial.print(path);
   Serial.print(" exists=");
   Serial.print(ref.exists() ? "yes" : "no");
   Serial.print(" type=");
-  if (ref.isNull()) Serial.println("Null");
-  else if (ref.isBool()) Serial.println("Bool");
-  else if (ref.isInt()) Serial.println("Int");
-  else if (ref.isDouble()) Serial.println("Double");
-  else if (ref.isString()) Serial.println("String");
-  else if (ref.isObject()) Serial.println("Object");
-  else if (ref.isArray()) Serial.println("Array");
-  else Serial.println("Unknown");
+  if (ref.isNull())
+    Serial.println("Null");
+  else if (ref.isBool())
+    Serial.println("Bool");
+  else if (ref.isInt())
+    Serial.println("Int");
+  else if (ref.isDouble())
+    Serial.println("Double");
+  else if (ref.isString())
+    Serial.println("String");
+  else if (ref.isObject())
+    Serial.println("Object");
+  else if (ref.isArray())
+    Serial.println("Array");
+  else
+    Serial.println("Unknown");
 }
 
-void setup() {
+void setup()
+{
   Serial.begin(115200);
-  while (!Serial) {
-    delay(10);
-  }
+}
+
+void loop()
+{
+  AssocTree<1024> typeDoc;
 
   typeDoc["flag"] = true;
   typeDoc["value"] = 123;
@@ -47,6 +58,7 @@ void setup() {
   Serial.println(typeDoc["items"].contains(static_cast<size_t>(0)) ? "yes" : "no");
   Serial.print("items contains index 5? ");
   Serial.println(typeDoc["items"].contains(static_cast<size_t>(5)) ? "yes" : "no");
-}
+  Serial.println();
 
-void loop() {}
+  delay(5000);
+}

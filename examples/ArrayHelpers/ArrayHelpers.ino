@@ -3,13 +3,15 @@
 
 // en: Shows append(), size(), clear(), contains() on arrays
 // ja: append()/size()/clear()/contains() の配列向けサンプル
-AssocTree<2048> arrayDoc;
 
-void setup() {
+void setup()
+{
   Serial.begin(115200);
-  while (!Serial) {
-    delay(10);
-  }
+}
+
+void loop()
+{
+  AssocTree<2048> arrayDoc;
 
   arrayDoc["nums"][0] = 1;
   arrayDoc["nums"][1] = 2;
@@ -26,7 +28,8 @@ void setup() {
   Serial.print("after append size=");
   Serial.println(arr.size());
 
-  for (auto entry : arr.children()) {
+  for (auto entry : arr.children())
+  {
     Serial.print(entry.index());
     Serial.print(": ");
     Serial.println(entry.value().as<int>(0));
@@ -48,6 +51,6 @@ void setup() {
 
   // en: After gc(), NodeRefs become invalid and must be reacquired.
   // ja: gc() 実行後は NodeRef が無効になるので再取得が必要。
-}
 
-void loop() {}
+  delay(5000);
+}

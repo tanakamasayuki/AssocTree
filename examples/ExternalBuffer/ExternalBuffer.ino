@@ -7,34 +7,35 @@
 
 // en: Custom buffer pointer for the runtime-sized AssocTree
 // ja: 実行時にサイズを決める AssocTree 用のカスタムバッファ
-uint8_t* psramBuffer = nullptr;
+uint8_t *psramBuffer = nullptr;
 size_t psramBytes = 0;
 
 // en: Runtime variant that consumes external memory
 // ja: 外部メモリを利用するランタイム版
-AssocTree<0>* runtimeDoc = nullptr;
+AssocTree<0> *runtimeDoc = nullptr;
 
-void setup() {
+void setup()
+{
   Serial.begin(115200);
-  while (!Serial) {
-    delay(10);
-  }
 
 #if defined(ESP32)
   // en: Ask for 8 KB from PSRAM; fallback to heap if PSRAM is unavailable
   // ja: PSRAM から 8KB を要求し、確保できない場合は通常ヒープを利用
   psramBytes = 8 * 1024;
-  psramBuffer = static_cast<uint8_t*>(heap_caps_malloc(psramBytes, MALLOC_CAP_SPIRAM));
+  psramBuffer = static_cast<uint8_t *>(heap_caps_malloc(psramBytes, MALLOC_CAP_SPIRAM));
 #endif
 
-  if (!psramBuffer) {
+  if (!psramBuffer)
+  {
     psramBytes = 4096;
-    psramBuffer = static_cast<uint8_t*>(malloc(psramBytes));
+    psramBuffer = static_cast<uint8_t *>(malloc(psramBytes));
   }
 
-  if (!psramBuffer) {
+  if (!psramBuffer)
+  {
     Serial.println(F("Failed to allocate buffer"));
-    while (true) {
+    while (true)
+    {
       delay(1000);
     }
   }
@@ -48,8 +49,10 @@ void setup() {
   (*runtimeDoc)["logs"][0] = "Boot ok";
 }
 
-void loop() {
-  if (!runtimeDoc) {
+void loop()
+{
+  if (!runtimeDoc)
+  {
     return;
   }
 
@@ -60,7 +63,8 @@ void loop() {
   (*runtimeDoc)["logs"][static_cast<size_t>(tick % 10)] = line.c_str();
 
   String json;
-  if (runtimeDoc->toJson(json)) {
+  if (runtimeDoc->toJson(json))
+  {
     Serial.println(json);
   }
 
