@@ -147,6 +147,13 @@ Notes:
 - GC or writes invalidate iterators just like NodeRefs (*revision*-based safety checks apply).
 - No dynamic allocation: iterators only store indexes/pointers.
 
+- Lightweight helpers around `NodeRef` improve ergonomics without extra allocations:
+  - `exists()` / `contains(key/index)` to check presence only.
+  - `type()` plus `isNull/isBool/isInt/isDouble/isString/isObject/isArray`.
+  - `size()` to count children on objects/arrays.
+  - `append()` for array push-back.
+  - `clear()` to remove all children (logical deletion until GC).
+
 ---
 
 ## 6. Lazy allocation (`operator=`)

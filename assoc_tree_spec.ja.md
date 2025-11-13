@@ -159,6 +159,12 @@ for (auto entry : doc["values"].children()) {
 - GC や書き込みが走ると従来の NodeRef 同様にイテレータも無効化される。`revision` を比較しつつ安全に扱う必要あり。
 - 動的確保は行わない設計とし、`NodeIterator` は `AssocTreeBase*` とノードインデックスのみを持つ。
 
+- `NodeRef::exists()` / `contains(key/index)` で存在確認のみを行える軽量API  
+- `NodeRef::type()` や `isNull()/isBool()/isInt()/isDouble()/isString()/isObject()/isArray()` で型を即座に判定  
+- `NodeRef::size()` はオブジェクト／配列の子数を返す  
+- 配列向け `append(value)` で末尾追加を簡単に行える  
+- `clear()` でノード以下の子要素を一括削除（GCまでは論理削除）
+
 ---
 
 ## 6. 遅延確保（operator=）
