@@ -44,9 +44,9 @@ void setup() {
   Serial.print("data contains 'nested'? ");
   Serial.println(typeDoc["data"].contains("nested") ? "yes" : "no");
   Serial.print("items contains index 0? ");
-  Serial.println(typeDoc["items"].contains(0) ? "yes" : "no");
+  Serial.println(typeDoc["items"].contains(static_cast<size_t>(0)) ? "yes" : "no");
   Serial.print("items contains index 5? ");
-  Serial.println(typeDoc["items"].contains(5) ? "yes" : "no");
+  Serial.println(typeDoc["items"].contains(static_cast<size_t>(5)) ? "yes" : "no");
 }
 
 void loop() {}
