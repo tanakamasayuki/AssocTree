@@ -156,6 +156,24 @@ class NodeRef {
   bool isAttached() const;
   NodeRange children() const;
 
+  bool append(int32_t value);
+  bool append(bool value);
+  bool append(double value);
+  bool append(const char* value);
+  bool append(const std::string& value);
+#ifdef ARDUINO
+  bool append(const String& value);
+#endif
+
+  template <
+      typename T,
+      typename = std::enable_if_t<
+          std::is_integral<T>::value && !std::is_same<T, bool>::value &&
+          !std::is_same<T, int32_t>::value>>
+  bool append(T value) {
+    return append(static_cast<int32_t>(value));
+  }
+
  private:
   friend class AssocTreeBase;
   friend class NodeEntry;
@@ -179,6 +197,9 @@ class NodeRef {
   bool prepareForSegment(NodeRef& ref) const;
   bool appendKey(NodeRef& ref, const char* key, size_t len) const;
   detail::LazyPathRef pendingPath() const;
+
+  template <typename Writer>
+  bool appendWithWriter(Writer&& writer);
 };
 
 class NodeEntry {
@@ -328,6 +349,31 @@ class AssocTree<0> : public AssocTreeBase {
  public:
   AssocTree(uint8_t* buffer, size_t bytes);
 };
+
+template <typename Writer>
+inline bool NodeRef::appendWithWriter(Writer&& writer) {
+  if (!tree_) {
+    return false;
+  }
+  uint16_t idx = ensureAttached();
+  if (idx == detail::kInvalidIndex) {
+    return false;
+  }
+  detail::Node* node = tree_->nodeAt(idx);
+  if (!node) {
+    return false;
+  }
+  if (node->type == detail::NodeType::Null) {
+    node->type = detail::NodeType::Array;
+  }
+  if (node->type != detail::NodeType::Array) {
+    return false;
+  }
+  size_t currentSize = tree_->countChildren(idx);
+  NodeRef slot = (*this)[currentSize];
+  writer(slot);
+  return true;
+}
 
 }  // namespace assoc_tree
 

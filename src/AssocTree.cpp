@@ -238,29 +238,31 @@ bool NodeRef::contains(size_t index) const {
   return tree_->findChildByIndex(idx, index) != detail::kInvalidIndex;
 }
 
-bool NodeRef::append(const NodeRef& value) {
-  if (!tree_) {
-    return false;
-  }
-  uint16_t idx = ensureAttached();
-  if (idx == detail::kInvalidIndex) {
-    return false;
-  }
-  detail::Node* node = tree_->nodeAt(idx);
-  if (!node) {
-    return false;
-  }
-  if (node->type == detail::NodeType::Null) {
-    node->type = detail::NodeType::Array;
-  }
-  if (node->type != detail::NodeType::Array) {
-    return false;
-  }
-  size_t currentSize = tree_->countChildren(idx);
-  NodeRef slot = (*this)[currentSize];
-  slot = value;
-  return true;
+bool NodeRef::append(int32_t value) {
+  return appendWithWriter([&](NodeRef& slot) { slot = value; });
 }
+
+bool NodeRef::append(bool value) {
+  return appendWithWriter([&](NodeRef& slot) { slot = value; });
+}
+
+bool NodeRef::append(double value) {
+  return appendWithWriter([&](NodeRef& slot) { slot = value; });
+}
+
+bool NodeRef::append(const char* value) {
+  return appendWithWriter([&](NodeRef& slot) { slot = value; });
+}
+
+bool NodeRef::append(const std::string& value) {
+  return appendWithWriter([&](NodeRef& slot) { slot = value; });
+}
+
+#ifdef ARDUINO
+bool NodeRef::append(const String& value) {
+  return appendWithWriter([&](NodeRef& slot) { slot = value; });
+}
+#endif
 
 void NodeRef::clear() {
   if (!tree_) {

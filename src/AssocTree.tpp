@@ -57,10 +57,20 @@ T NodeRef::as(const T& defaultValue) const {
       return std::string(data, node->value.asString.length);
     }
     return defaultValue;
+#ifdef ARDUINO
+  } else if constexpr (std::is_same<T, String>::value) {
+    if (node->type == detail::NodeType::String &&
+        node->value.asString.valid()) {
+      const char* data = tree->stringAt(node->value.asString);
+      return String(data);
+    }
+    return defaultValue;
+#endif
   } else {
     static_assert(
         !std::is_same<T, T>::value,
         "NodeRef::as<T>() is not implemented for this type.");
+    return defaultValue;
   }
 }
 

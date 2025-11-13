@@ -19,6 +19,7 @@ void setup() {
   Serial.println(arrayDoc["nums"].size());
 
   NodeRef arr = arrayDoc["nums"];
+
   arr.append(42);
   arr.append(-5);
 
