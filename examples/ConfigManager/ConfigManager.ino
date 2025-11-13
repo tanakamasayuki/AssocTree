@@ -32,7 +32,7 @@ void loop() {
 
   // en: Push a reading into an array (auto-expands lazily)
   // ja: センサ読値を配列へ積み上げ（必要時のみノード生成）
-  configDoc["readings"][cycle % 5] = analogRead(A0);
+  configDoc["readings"][static_cast<size_t>(cycle % 5)] = analogRead(A0);
 
   // en: Remove the password once it has been shipped to the Wi-Fi stack
   // ja: Wi-Fi スタックへ渡した後はパスワードを即削除
