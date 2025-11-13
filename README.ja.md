@@ -73,6 +73,8 @@ void loop() {}
 - `examples/ConfigManager/ConfigManager.ino` – `unset()` / `gc()` を活用する設定ストア。
 - `examples/ExternalBuffer/ExternalBuffer.ino` – `AssocTree<0>` と外部バッファ（PSRAM 等）の組み合わせ。
 - `examples/IteratorDemo/IteratorDemo.ino` – オブジェクト/配列を走査するイテレータAPIの例。
+- `examples/TypeChecks/TypeChecks.ino` – `exists()`, `type()`, `isXXX()`, `contains()` の使用例。
+- `examples/ArrayHelpers/ArrayHelpers.ino` – `append()`, `size()`, `clear()`, `contains(index)`、GC の挙動確認。
 
 ## 実行時バッファ版
 
@@ -93,6 +95,8 @@ PSRAM や `heap_caps_malloc` を用いた独自アロケータと組み合わせ
   `nullptr`, `bool`, `int32_t`, `double`, `const char*`, `String` などを格納。
 - `template<typename T> T NodeRef::as(const T& defaultValue)`  
   ノードが無ければデフォルト値を返します。副作用なし。
+- 型関連ヘルパー: `exists()`, `type()`, `isNull/isBool/isInt/isDouble/isString/isObject/isArray`
+- コンテナヘルパー: `size()`, `contains(key/index)`, `append()`, `clear()`
 - `size_t AssocTree::freeBytes() const`  
   Node 領域と String 領域の間に残っているバイト数を返します。
 - `void AssocTree::gc()`  

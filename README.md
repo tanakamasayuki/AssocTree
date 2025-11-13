@@ -73,6 +73,8 @@ See `examples/BasicUsage/BasicUsage.ino` for the complete sketch.
 - `examples/ConfigManager/ConfigManager.ino` – runtime configuration store with `unset()` and `gc()`.
 - `examples/ExternalBuffer/ExternalBuffer.ino` – template `AssocTree<0>` fed by PSRAM or custom buffers.
 - `examples/IteratorDemo/IteratorDemo.ino` – demonstrates the child iterator API for objects/arrays.
+- `examples/TypeChecks/TypeChecks.ino` – highlights `exists()`, `type()`, `isXXX()`, `contains()` helpers.
+- `examples/ArrayHelpers/ArrayHelpers.ino` – shows `append()`, `size()`, `clear()`, `contains(index)`, and GC impact.
 
 ## Runtime Buffer Variant
 
@@ -93,6 +95,8 @@ This is ideal when PSRAM or a custom allocator is involved (e.g., `heap_caps_mal
   Assign `nullptr`, `bool`, `int32_t`, `double`, `const char*`, or `String`.
 - `template<typename T> T NodeRef::as(const T& defaultValue)`  
   Read without side effects. Supports `bool`, integral, floating, `std::string`.
+- Type helpers: `exists()`, `type()`, `isNull/isBool/isInt/isDouble/isString/isObject/isArray`.
+- Container helpers: `size()`, `contains(key/index)`, `append()`, `clear()`.
 - `size_t AssocTree::freeBytes() const`  
   Observe remaining space between node and string regions.
 - `void AssocTree::gc()`  
