@@ -12,6 +12,7 @@ Key traits:
 - `operator[]` returns a lazy path; nodes are materialized only on assignment.
 - Read operations have zero side effects.
 - Supports `unset()`-style deletions with optional GC to reclaim memory.
+- On ESP32 builds, all API calls (including `gc()`) are wrapped in a critical section so other cores block until GC finishes (`ASSOCTREE_ENABLE_THREAD_SAFETY`).
 - Optional JSON serialization for debugging.
 
 ---
@@ -208,6 +209,12 @@ Behavior:
 2. **Node compaction**: shift live nodes toward the head; update links.
 3. **String compaction**: reinsert surviving strings tail-first to remove fragmentation.
 4. **Result**: maximum `freeBytes()`; previously attached NodeRefs become invalid.
+
+### 9.5 Thread safety / multi-core behavior
+- On ESP32/ESP_PLATFORM builds, `ASSOCTREE_ENABLE_THREAD_SAFETY` is enabled by default.
+- All public API, including `gc()`, is guarded by the same critical section.
+- While `gc()` runs, other cores block on the lock and resume after completion.
+- On other targets, the guard is disabled; you can force-disable with `ASSOCTREE_ENABLE_THREAD_SAFETY=0`.
 
 ---
 

@@ -4,6 +4,7 @@ namespace assoc_tree {
 
 template <typename T>
 T NodeRef::as(const T& defaultValue) const {
+  auto guard = makeGuard();
   uint16_t idx = resolveExisting();
   const AssocTreeBase* tree = tree_;
   if (!tree || idx == detail::kInvalidIndex) {

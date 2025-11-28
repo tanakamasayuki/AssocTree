@@ -19,6 +19,23 @@
 #include <Arduino.h>
 #endif
 
+#ifndef ASSOCTREE_ENABLE_THREAD_SAFETY
+#if defined(ESP_PLATFORM) || defined(ESP32)
+#define ASSOCTREE_ENABLE_THREAD_SAFETY 1
+#else
+#define ASSOCTREE_ENABLE_THREAD_SAFETY 0
+#endif
+#endif
+
+#if ASSOCTREE_ENABLE_THREAD_SAFETY
+#if defined(ESP_PLATFORM) || defined(ESP32)
+#include "freertos/FreeRTOS.h"
+#include "freertos/portmacro.h"
+#else
+#include <mutex>
+#endif
+#endif
+
 namespace assoc_tree {
 
 class AssocTreeBase;
@@ -91,6 +108,47 @@ struct LazyPathRef {
 
   const char* keyData(const LazySegment& seg) const {
     return reinterpret_cast<const char*>(keyStorage + seg.keyOffset);
+  }
+};
+
+struct Lock {
+#if ASSOCTREE_ENABLE_THREAD_SAFETY
+#if defined(ESP_PLATFORM) || defined(ESP32)
+  portMUX_TYPE mux = portMUX_INITIALIZER_UNLOCKED;
+  void lock() { portENTER_CRITICAL(&mux); }
+  void unlock() { portEXIT_CRITICAL(&mux); }
+#else
+  std::recursive_mutex mux;
+  void lock() { mux.lock(); }
+  void unlock() { mux.unlock(); }
+#endif
+#else
+  void lock() {}
+  void unlock() {}
+#endif
+};
+
+struct LockGuard {
+  Lock* lock = nullptr;
+  explicit LockGuard(Lock* lk) : lock(lk) {
+    if (lock) {
+      lock->lock();
+    }
+  }
+  ~LockGuard() {
+    if (lock) {
+      lock->unlock();
+    }
+  }
+  LockGuard(const LockGuard&) = delete;
+  LockGuard& operator=(const LockGuard&) = delete;
+  LockGuard(LockGuard&& other) noexcept : lock(other.lock) { other.lock = nullptr; }
+  LockGuard& operator=(LockGuard&& other) noexcept {
+    if (this != &other) {
+      lock = other.lock;
+      other.lock = nullptr;
+    }
+    return *this;
   }
 };
 
@@ -197,6 +255,8 @@ class NodeRef {
   bool prepareForSegment(NodeRef& ref) const;
   bool appendKey(NodeRef& ref, const char* key, size_t len) const;
   detail::LazyPathRef pendingPath() const;
+
+  detail::LockGuard makeGuard() const;
 
   template <typename Writer>
   bool appendWithWriter(Writer&& writer);
@@ -312,6 +372,7 @@ class AssocTreeBase {
   uint16_t findExisting(uint16_t baseIndex, detail::LazyPathRef path) const;
 
   void detachNode(uint16_t nodeIndex);
+  detail::LockGuard makeLockGuard() const;
 
  private:
   uint16_t appendChild(uint16_t parentIndex);
@@ -333,6 +394,7 @@ class AssocTreeBase {
   size_t strTop_;
   uint16_t nodeCount_;
   uint32_t revision_;
+  mutable detail::Lock lock_;
 };
 
 template <size_t TOTAL_BYTES>
@@ -352,6 +414,7 @@ class AssocTree<0> : public AssocTreeBase {
 
 template <typename Writer>
 inline bool NodeRef::appendWithWriter(Writer&& writer) {
+  auto guard = makeGuard();
   if (!tree_) {
     return false;
   }

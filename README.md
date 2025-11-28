@@ -10,6 +10,7 @@ AssocTree is a static-memory associative tree designed for Arduino/ESP32 and oth
 - **Lazy node creation** – chained `operator[]` builds a path; nodes are allocated only when assigning values, so read operations cause zero side effects.
 - **Mixed hierarchy** – seamlessly combine objects and arrays to model JSON-like data.
 - **Manual GC** – `gc()` executes mark/compact/defragment cycles for both node and string areas.
+- **Multi-core safe on ESP32** – by default the library wraps all API calls and `gc()` in a critical section so other cores block until GC completes (`ASSOCTREE_ENABLE_THREAD_SAFETY`).
 - **UTF-8 strings** – stored tail-first inside the pool, with automatic compaction during GC.
 - **Optional JSON dump** – `toJson(std::string&)` (and `toJson(String&)` on Arduino) makes debugging easy without pulling extra libraries.
 

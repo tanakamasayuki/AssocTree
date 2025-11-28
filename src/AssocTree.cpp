@@ -19,11 +19,13 @@ NodeRef::NodeRef(AssocTreeBase* tree, uint16_t baseIndex, uint16_t attachedIndex
       revision_(tree ? tree->revision_ : 0) {}
 
 NodeRef NodeRef::operator[](const char* key) const {
+  auto guard = makeGuard();
   const char* safe = key ? key : "";
   return withKeySegment(safe, std::strlen(safe));
 }
 
 NodeRef NodeRef::operator[](size_t index) const {
+  auto guard = makeGuard();
   return withIndexSegment(index);
 }
 
@@ -35,6 +37,7 @@ NodeRef NodeRef::operator[](int index) const {
 }
 
 NodeRef& NodeRef::operator=(std::nullptr_t) {
+  auto guard = makeGuard();
   uint16_t idx = ensureAttached();
   if (idx == detail::kInvalidIndex) {
     return *this;
@@ -47,6 +50,7 @@ NodeRef& NodeRef::operator=(std::nullptr_t) {
 }
 
 NodeRef& NodeRef::operator=(bool value) {
+  auto guard = makeGuard();
   uint16_t idx = ensureAttached();
   if (idx == detail::kInvalidIndex) {
     return *this;
@@ -59,6 +63,7 @@ NodeRef& NodeRef::operator=(bool value) {
 }
 
 NodeRef& NodeRef::operator=(int32_t value) {
+  auto guard = makeGuard();
   uint16_t idx = ensureAttached();
   if (idx == detail::kInvalidIndex) {
     return *this;
@@ -71,6 +76,7 @@ NodeRef& NodeRef::operator=(int32_t value) {
 }
 
 NodeRef& NodeRef::operator=(double value) {
+  auto guard = makeGuard();
   uint16_t idx = ensureAttached();
   if (idx == detail::kInvalidIndex) {
     return *this;
@@ -83,6 +89,7 @@ NodeRef& NodeRef::operator=(double value) {
 }
 
 NodeRef& NodeRef::operator=(const char* value) {
+  auto guard = makeGuard();
   if (!value) {
     return (*this = nullptr);
   }
@@ -98,6 +105,7 @@ NodeRef& NodeRef::operator=(const char* value) {
 }
 
 NodeRef& NodeRef::operator=(const std::string& value) {
+  auto guard = makeGuard();
   uint16_t idx = ensureAttached();
   if (idx == detail::kInvalidIndex) {
     return *this;
@@ -110,6 +118,7 @@ NodeRef& NodeRef::operator=(const std::string& value) {
 }
 
 const char* NodeRef::asCString(const char* defaultValue) const {
+  auto guard = makeGuard();
   uint16_t idx = resolveExisting();
   if (idx == detail::kInvalidIndex) {
     return defaultValue;
@@ -123,6 +132,7 @@ const char* NodeRef::asCString(const char* defaultValue) const {
 }
 
 NodeRef::operator bool() const {
+  auto guard = makeGuard();
   uint16_t idx = resolveExisting();
   if (idx == detail::kInvalidIndex) {
     return false;
@@ -165,10 +175,12 @@ NodeRef::operator bool() const {
 }
 
 bool NodeRef::exists() const {
+  auto guard = makeGuard();
   return resolveExisting() != detail::kInvalidIndex;
 }
 
 detail::NodeType NodeRef::type() const {
+  auto guard = makeGuard();
   uint16_t idx = resolveExisting();
   if (idx == detail::kInvalidIndex || !tree_) {
     return detail::NodeType::Null;
@@ -193,6 +205,7 @@ ASSOCTREE_DEFINE_TYPE_CHECK(isArray, Array)
 #undef ASSOCTREE_DEFINE_TYPE_CHECK
 
 size_t NodeRef::size() const {
+  auto guard = makeGuard();
   uint16_t idx = resolveExisting();
   if (idx == detail::kInvalidIndex || !tree_) {
     return 0;
@@ -209,6 +222,7 @@ size_t NodeRef::size() const {
 }
 
 bool NodeRef::contains(const char* key) const {
+  auto guard = makeGuard();
   if (!tree_ || !key) {
     return false;
   }
@@ -224,6 +238,7 @@ bool NodeRef::contains(const char* key) const {
 }
 
 bool NodeRef::contains(size_t index) const {
+  auto guard = makeGuard();
   if (!tree_) {
     return false;
   }
@@ -265,6 +280,7 @@ bool NodeRef::append(const String& value) {
 #endif
 
 void NodeRef::clear() {
+  auto guard = makeGuard();
   if (!tree_) {
     return;
   }
@@ -288,6 +304,7 @@ void NodeRef::clear() {
 }
 
 void NodeRef::unset() {
+  auto guard = makeGuard();
   uint16_t idx = resolveExisting();
   if (idx == detail::kInvalidIndex) {
     return;
@@ -301,6 +318,7 @@ void NodeRef::unset() {
 }
 
 bool NodeRef::isAttached() const {
+  auto guard = makeGuard();
   if (!tree_) {
     return false;
   }
@@ -442,7 +460,15 @@ detail::LazyPathRef NodeRef::pendingPath() const {
   return ref;
 }
 
+detail::LockGuard NodeRef::makeGuard() const {
+  if (tree_) {
+    return tree_->makeLockGuard();
+  }
+  return detail::LockGuard(nullptr);
+}
+
 NodeRange NodeRef::children() const {
+  auto guard = makeGuard();
   if (!tree_) {
     return NodeRange();
   }
@@ -465,6 +491,7 @@ NodeEntry::NodeEntry(AssocTreeBase* tree, uint16_t nodeIndex, bool isArray, size
     : tree_(tree), nodeIndex_(nodeIndex), isArray_(isArray), arrayIndex_(arrayIndex) {}
 
 const char* NodeEntry::key() const {
+  auto guard = tree_ ? tree_->makeLockGuard() : detail::LockGuard(nullptr);
   if (!tree_ || isArray_ || nodeIndex_ == detail::kInvalidIndex) {
     return "";
   }
@@ -476,6 +503,7 @@ const char* NodeEntry::key() const {
 }
 
 NodeRef NodeEntry::value() const {
+  auto guard = tree_ ? tree_->makeLockGuard() : detail::LockGuard(nullptr);
   if (!tree_ || nodeIndex_ == detail::kInvalidIndex) {
     return NodeRef();
   }
@@ -493,6 +521,7 @@ NodeIterator::NodeIterator(
       isArray_(isArray),
       revision_(revision),
       arrayIndex_(arrayIndex) {
+  auto guard = tree_ ? tree_->makeLockGuard() : detail::LockGuard(nullptr);
   advanceToValid();
 }
 
@@ -515,10 +544,12 @@ void NodeIterator::advanceToValid() {
 }
 
 NodeEntry NodeIterator::operator*() const {
+  auto guard = tree_ ? tree_->makeLockGuard() : detail::LockGuard(nullptr);
   return NodeEntry(tree_, current_, isArray_, arrayIndex_);
 }
 
 NodeIterator& NodeIterator::operator++() {
+  auto guard = tree_ ? tree_->makeLockGuard() : detail::LockGuard(nullptr);
   if (!tree_ || current_ == detail::kInvalidIndex) {
     current_ = detail::kInvalidIndex;
     return *this;
@@ -611,6 +642,7 @@ NodeRef AssocTreeBase::operator[](size_t index) {
 }
 
 size_t AssocTreeBase::freeBytes() const {
+  auto guard = makeLockGuard();
   if (strTop_ <= nodeTop_) {
     return 0;
   }
@@ -618,6 +650,7 @@ size_t AssocTreeBase::freeBytes() const {
 }
 
 void AssocTreeBase::gc() {
+  auto guard = makeLockGuard();
   if (!buffer_) {
     return;
   }
@@ -634,6 +667,7 @@ void AssocTreeBase::gc() {
 }
 
 bool AssocTreeBase::toJson(std::string& out) const {
+  auto guard = makeLockGuard();
   if (!buffer_) {
     out.clear();
     return false;
@@ -815,6 +849,10 @@ uint16_t AssocTreeBase::findExisting(uint16_t baseIndex, detail::LazyPathRef pat
     }
   }
   return current;
+}
+
+detail::LockGuard AssocTreeBase::makeLockGuard() const {
+  return detail::LockGuard(&lock_);
 }
 
 void AssocTreeBase::detachNode(uint16_t nodeIndex) {
