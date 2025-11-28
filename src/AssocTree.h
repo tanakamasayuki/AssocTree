@@ -170,6 +170,9 @@ class NodeRef {
   NodeRef& operator=(double value);
   NodeRef& operator=(const char* value);
   NodeRef& operator=(const std::string& value);
+#ifdef ARDUINO
+  NodeRef& operator=(const String& value);
+#endif
 
   template <typename T>
   std::enable_if_t<

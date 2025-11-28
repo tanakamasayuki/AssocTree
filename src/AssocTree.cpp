@@ -117,6 +117,21 @@ NodeRef& NodeRef::operator=(const std::string& value) {
   return *this;
 }
 
+#ifdef ARDUINO
+NodeRef& NodeRef::operator=(const String& value) {
+  auto guard = makeGuard();
+  uint16_t idx = ensureAttached();
+  if (idx == detail::kInvalidIndex) {
+    return *this;
+  }
+  detail::Node* node = tree_->nodeAt(idx);
+  if (node) {
+    tree_->setNodeString(*node, value.c_str(), value.length());
+  }
+  return *this;
+}
+#endif
+
 const char* NodeRef::asCString(const char* defaultValue) const {
   auto guard = makeGuard();
   uint16_t idx = resolveExisting();
