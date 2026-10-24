@@ -1,3 +1,5 @@
+// en: Build nested settings and serialize them as JSON
+// ja: 階層化した設定を作りJSONへ出力する
 #include <Arduino.h>
 #include <AssocTree.h>
 

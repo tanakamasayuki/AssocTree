@@ -1,3 +1,5 @@
+// en: Store and update a small document with fallback reads
+// ja: 小さな文書を保存・更新し、代替値付きで読み出す
 #include <Arduino.h>
 #include <AssocTree.h>
 

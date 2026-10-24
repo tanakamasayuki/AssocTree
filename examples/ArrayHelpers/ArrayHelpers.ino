@@ -1,3 +1,5 @@
+// en: Append, inspect and clear an array
+// ja: 配列へ追加し、内容確認と削除を試す
 #include <Arduino.h>
 #include <AssocTree.h>
 
@@ -45,6 +47,8 @@ void loop()
 
   Serial.print("free bytes before gc=");
   Serial.println(arrayDoc.freeBytes());
+  // en: Compact the tree pool and reacquire all attached references afterwards.
+  // ja: Treeの領域を詰め直すので、あとで参照を取り直します。
   arrayDoc.gc();
   Serial.print("free bytes after gc=");
   Serial.println(arrayDoc.freeBytes());

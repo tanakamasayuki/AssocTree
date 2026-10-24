@@ -1,3 +1,5 @@
+// en: Check stored types before converting values
+// ja: 保存した型を確認してから値を変換する
 #include <Arduino.h>
 #include <AssocTree.h>
 

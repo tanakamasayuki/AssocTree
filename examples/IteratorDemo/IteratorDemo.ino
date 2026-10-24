@@ -1,3 +1,5 @@
+// en: Iterate object keys and array indices
+// ja: オブジェクトのキーと配列の添字を列挙する
 #include <Arduino.h>
 #include <AssocTree.h>
 

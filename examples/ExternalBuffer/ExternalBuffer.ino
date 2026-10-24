@@ -1,3 +1,5 @@
+// en: Use external storage with a runtime-sized tree
+// ja: 実行時サイズのツリーへ外部メモリを渡す
 #include <Arduino.h>
 #include <AssocTree.h>
 

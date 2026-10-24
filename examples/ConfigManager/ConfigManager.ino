@@ -1,3 +1,5 @@
+// en: Change configuration, remove entries and reclaim pool space
+// ja: 設定変更・項目削除・プール領域の回収を試す
 #include <Arduino.h>
 #include <AssocTree.h>
 
@@ -42,6 +44,8 @@ void loop()
   // ja: 削除済みキーのスロットを取り戻すため定期的にGCを呼ぶ
   if (cycle % 20 == 0)
   {
+    // en: Compact the tree pool and reacquire all attached references afterwards.
+    // ja: Treeの領域を詰め直すので、あとで参照を取り直します。
     configDoc.gc();
   }
 
